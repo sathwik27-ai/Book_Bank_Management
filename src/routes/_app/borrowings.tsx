@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +26,7 @@ function BorrowingsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     const { data } = await supabase
@@ -36,8 +36,10 @@ function BorrowingsPage() {
       .order("borrowed_at", { ascending: false });
     setRows((data as unknown as Row[]) ?? []);
     setLoading(false);
-  }
-  useEffect(() => { load(); }, [user]);
+  }, [user]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function returnBook(id: string) {
     const { error } = await supabase
@@ -70,16 +72,24 @@ function BorrowingsPage() {
                     <h3 className="font-semibold">{r.books?.title ?? "Unknown book"}</h3>
                     <p className="text-sm text-muted-foreground">by {r.books?.author}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Borrowed {new Date(r.borrowed_at).toLocaleDateString()} · Due {new Date(r.due_date).toLocaleDateString()}
-                      {r.returned_at && ` · Returned ${new Date(r.returned_at).toLocaleDateString()}`}
+                      Borrowed {new Date(r.borrowed_at).toLocaleDateString()} · Due{" "}
+                      {new Date(r.due_date).toLocaleDateString()}
+                      {r.returned_at &&
+                        ` · Returned ${new Date(r.returned_at).toLocaleDateString()}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={r.status === "returned" ? "secondary" : overdue ? "destructive" : "default"}>
+                    <Badge
+                      variant={
+                        r.status === "returned" ? "secondary" : overdue ? "destructive" : "default"
+                      }
+                    >
                       {r.status === "returned" ? "Returned" : overdue ? "Overdue" : "Borrowed"}
                     </Badge>
                     {r.status === "borrowed" && (
-                      <Button size="sm" onClick={() => returnBook(r.id)}>Return</Button>
+                      <Button size="sm" onClick={() => returnBook(r.id)}>
+                        Return
+                      </Button>
                     )}
                   </div>
                 </CardContent>

@@ -65,7 +65,10 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "var(--gradient-hero)" }}>
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: "var(--gradient-hero)" }}
+    >
       <div className="w-full max-w-md">
         <div className="text-center mb-6 text-primary-foreground">
           <div className="inline-flex items-center gap-2 mb-2">
@@ -89,11 +92,21 @@ function LoginPage() {
                 <form onSubmit={handleSignIn} className="space-y-4 mt-4">
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Password</Label>
-                    <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <Input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Signing in..." : "Sign in"}
@@ -104,29 +117,54 @@ function LoginPage() {
                 <form onSubmit={handleSignUp} className="space-y-4 mt-4">
                   <div className="space-y-2">
                     <Label>Full name</Label>
-                    <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                    <Input
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Password</Label>
-                    <Input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Role</Label>
-                    <RadioGroup value={role} onValueChange={(v) => setRole(v as "student" | "admin")} className="flex gap-4">
+                    <RadioGroup
+                      value={role}
+                      onValueChange={(v) => setRole(v as "student" | "admin")}
+                      className="flex gap-4"
+                    >
                       <div className="flex items-center gap-2">
                         <RadioGroupItem value="student" id="r-student" />
-                        <Label htmlFor="r-student" className="font-normal cursor-pointer">Student</Label>
+                        <Label htmlFor="r-student" className="font-normal cursor-pointer">
+                          Student
+                        </Label>
                       </div>
                       <div className="flex items-center gap-2">
                         <RadioGroupItem value="admin" id="r-admin" />
-                        <Label htmlFor="r-admin" className="font-normal cursor-pointer">Admin</Label>
+                        <Label htmlFor="r-admin" className="font-normal cursor-pointer">
+                          Admin
+                        </Label>
                       </div>
                     </RadioGroup>
-                    <p className="text-xs text-muted-foreground">Choose Admin to manage the catalog, or Student to borrow books.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Choose Admin to manage the catalog, or Student to borrow books.
+                    </p>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Creating..." : "Create account"}
@@ -135,7 +173,9 @@ function LoginPage() {
               </TabsContent>
             </Tabs>
             <div className="text-center mt-4">
-              <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Back to home</Link>
+              <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+                ← Back to home
+              </Link>
             </div>
           </CardContent>
         </Card>

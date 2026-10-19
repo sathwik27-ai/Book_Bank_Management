@@ -1,7 +1,22 @@
-import { createFileRoute, Link, Outlet, redirect, useRouter, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { BookOpen, LayoutDashboard, Library, ClipboardList, Settings, LogOut, Menu } from "lucide-react";
+import {
+  BookOpen,
+  LayoutDashboard,
+  Library,
+  ClipboardList,
+  Settings,
+  LogOut,
+  Menu,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -17,7 +32,11 @@ function AppLayout() {
   const [open, setOpen] = useState(true);
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading...
+      </div>
+    );
   }
 
   if (!user) {
@@ -40,7 +59,7 @@ function AppLayout() {
       <aside
         className={cn(
           "border-r bg-sidebar text-sidebar-foreground transition-all duration-300 flex flex-col",
-          open ? "w-64" : "w-16"
+          open ? "w-64" : "w-16",
         )}
       >
         <div className="flex h-16 items-center gap-2 px-4 border-b border-sidebar-border">
@@ -58,7 +77,7 @@ function AppLayout() {
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
                 <it.icon className="h-4 w-4 shrink-0" />
@@ -89,7 +108,8 @@ function AppLayout() {
           </Button>
           <div className="flex-1" />
           <div className="text-sm text-muted-foreground">
-            {user.email} · <span className="font-medium text-foreground capitalize">{role ?? "user"}</span>
+            {user.email} ·{" "}
+            <span className="font-medium text-foreground capitalize">{role ?? "user"}</span>
           </div>
         </header>
         <main className="flex-1 p-6">
