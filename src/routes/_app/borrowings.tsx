@@ -159,7 +159,7 @@ export function BorrowingsPage() {
     }
   }
 
-  function handleSendReminder(record: BorrowingRecord) {
+  async function handleSendReminder(record: BorrowingRecord) {
     if (!user) return;
     setSendingAlertId(record.id);
 
@@ -167,7 +167,7 @@ export function BorrowingsPage() {
     const userEmail = user.email || "student@bookbank.local";
 
     try {
-      const result = sendOverdueNotification({
+      const result = await sendOverdueNotification({
         userId: user.id,
         userEmail,
         bookTitle,
@@ -177,15 +177,27 @@ export function BorrowingsPage() {
 
       setNotifications(getNotifications(user.id));
 
-      toast.success(`📧 Due alert email notification sent to ${userEmail}!`, {
-        action: {
-          label: "Open Email App",
-          onClick: () => {
-            window.location.href = result.notification.mailtoLink;
+      if (result.formSubmitSent) {
+        toast.success(`📧 Email dispatched via FormSubmit directly to ${userEmail}!`, {
+          action: {
+            label: "Open Email App",
+            onClick: () => {
+              window.location.href = result.notification.mailtoLink;
+            },
           },
-        },
-        duration: 6000,
-      });
+          duration: 7000,
+        });
+      } else {
+        toast.success(`📧 Due alert notification processed for ${userEmail}!`, {
+          action: {
+            label: "Open Email App",
+            onClick: () => {
+              window.location.href = result.notification.mailtoLink;
+            },
+          },
+          duration: 7000,
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Notification failed: ${msg}`);

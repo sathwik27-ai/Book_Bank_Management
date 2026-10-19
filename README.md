@@ -97,27 +97,27 @@ stateDiagram-v2
 
 ---
 
-## 3. Automated Email Due Notification Gateway
+## 3. Automated Email Due Notification Gateway (via FormSubmit.co)
 
-BookBank includes an automated email alert gateway that directly addresses borrowers regarding upcoming deadlines and overdue textbooks with **zero external API keys or telecom fees**.
+BookBank includes an automated email alert gateway powered by **FormSubmit.co** that delivers real, structured notifications directly to borrowers' registered email inboxes regarding upcoming deadlines and overdue textbook late fines with **zero external API keys, SMTP passwords, or telecom fees**.
 
 ### Notification Specification
 
-| Trigger Point                                               | Target Recipient                         | Payload Content                                                                        | Delivery Method                                                                                            |
-| :---------------------------------------------------------- | :--------------------------------------- | :------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
-| - Due in $\le 2$ days<br>- Due Today<br>- Overdue ($D > 0$) | User's registered account (`user.email`) | Book title, due date, accrued late fine, return instructions, library contact details. | In-app notification engine with persistent audit trail + 1-click native Email app integration (`mailto:`). |
+| Trigger Point                                               | Target Recipient                         | Payload Content                                                                        | Delivery Method                                                                                                                         |
+| :---------------------------------------------------------- | :--------------------------------------- | :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| - Due in $\le 2$ days<br>- Due Today<br>- Overdue ($D > 0$) | User's registered account (`user.email`) | Book title, due date, accrued late fine, return instructions, library contact details. | **FormSubmit.co AJAX Endpoint** directly delivering real email to the registered inbox + 1-click native Email app fallback (`mailto:`). |
 
 ### Architectural Flow of Email Alerts
 
 1. **Trigger Evaluation**: When a user accesses Borrowings or triggers "Send Due Alert", active loans are evaluated against `calculateFine()`.
 2. **Recipient Resolution**: Email is automatically resolved from the active authenticated account (`user.email`).
-3. **Payload Construction**:
-   - Generates contextual subject lines (`[BookBank Alert] Action Required: Book Overdue "${bookTitle}"`).
-   - Assembles the complete formal notification body with due dates and exact fine accrual amounts.
+3. **FormSubmit Delivery (`src/lib/notification-service.ts`)**:
+   - Dispatches a structured HTTP POST to `https://formsubmit.co/ajax/${email}` with `_subject`, `_template: "table"`, `_captcha: "false"`, book details, due date, and fine calculations.
+   - FormSubmit delivers the formatted HTML notification directly to the student's email inbox without requiring any API keys or credentials.
 4. **Delivery & Audit Trail**:
    - Dispatches are recorded in persistent notification logs (`bookbank_notifications_${userId}`) to track delivery timestamps, recipient address, and alert history.
    - An interactive on-screen notification drawer allows students and administrators to inspect dispatched alert history.
-   - Provides a 1-click **"Open in Email App"** action to trigger the user's default email client (Gmail, Outlook, Apple Mail) with the pre-filled notification.
+   - Provides a 1-click **"Open in Email App"** action (`mailto:`) as an immediate native client shortcut.
 
 ---
 
