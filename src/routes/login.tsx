@@ -15,6 +15,13 @@ export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — BookBank" }] }),
 });
 
+function getAuthErrorMessage(error: unknown) {
+  if (error instanceof Error && /failed to fetch/i.test(error.message)) {
+    return "Could not connect to Supabase. Check your internet connection and Supabase project settings, then try again.";
+  }
+  return error instanceof Error ? error.message : "Authentication failed. Please try again.";
+}
+
 function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -46,22 +53,33 @@ function LoginPage() {
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: redirectUrl, data: { full_name: fullName } },
-    });
-    if (error) {
+    try {
+      const redirectUrl = `${window.location.origin}/dashboard`;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectUrl, data: { full_name: fullName } },
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error("Supabase did not return the new account.");
+
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({ user_id: data.user.id, role });
+      if (roleError) {
+        throw new Error(
+          `Account created, but saving the selected role failed: ${roleError.message}`,
+        );
+      }
+
+      toast.success("Account created! You're signed in.");
+      router.navigate({ to: "/dashboard" });
+    } catch (error) {
+      console.error("[Auth] Account creation failed", error);
+      toast.error(getAuthErrorMessage(error));
+    } finally {
       setLoading(false);
-      return toast.error(error.message);
     }
-    if (data.user) {
-      await supabase.from("user_roles").insert({ user_id: data.user.id, role });
-    }
-    setLoading(false);
-    toast.success("Account created! You're signed in.");
-    router.navigate({ to: "/dashboard" });
   }
 
   return (
