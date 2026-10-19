@@ -112,8 +112,10 @@ BookBank includes an automated email alert gateway powered by **FormSubmit.co** 
 1. **Trigger Evaluation**: When a user accesses Borrowings or triggers "Send Due Alert", active loans are evaluated against `calculateFine()`.
 2. **Recipient Resolution**: Email is automatically resolved from the active authenticated account (`user.email`).
 3. **FormSubmit Delivery (`src/lib/notification-service.ts`)**:
-   - Dispatches a structured HTTP POST to `https://formsubmit.co/ajax/${email}` with `_subject`, `_template: "table"`, `_captcha: "false"`, book details, due date, and fine calculations.
+   - Dispatches a structured HTTP POST to `https://formsubmit.co/ajax/${email}` with `_subject`, `_template: "table"`, `_captcha: "false"`, `email: userEmail`, book details, due date, and fine calculations.
    - FormSubmit delivers the formatted HTML notification directly to the student's email inbox without requiring any API keys or credentials.
+   - **One-Time Email Activation Protocol**: The first time an email address receives submissions through FormSubmit, FormSubmit sends an activation link (*"Action Required: Confirm your email to receive form submissions"*). Once confirmed by clicking **"Activate Form"**, all subsequent library alerts are delivered automatically to the inbox.
+   - **Direct Browser Submission Option (`submitFormSubmitForm`)**: Provides a direct submission method that opens FormSubmit's confirmation window in a new tab, bypassing any potential client-side ad-blockers or CORS restrictions and providing visual delivery confirmation.
 4. **Delivery & Audit Trail**:
    - Dispatches are recorded in persistent notification logs (`bookbank_notifications_${userId}`) to track delivery timestamps, recipient address, and alert history.
    - An interactive on-screen notification drawer allows students and administrators to inspect dispatched alert history.

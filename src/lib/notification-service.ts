@@ -15,6 +15,7 @@ export interface NotificationPayload {
   timestamp: string;
   status: "delivered" | "sent" | "queued";
   formSubmitStatus?: string;
+  activationRequired?: boolean;
 }
 
 const NOTIFICATIONS_STORAGE_PREFIX = "bookbank_notifications_";
@@ -43,8 +44,111 @@ export function saveNotification(userId: string, notification: NotificationPaylo
 }
 
 /**
+ * Triggers a direct FormSubmit HTML form submission in a new tab.
+ * This guarantees FormSubmit's verification and email delivery screen is displayed to the user.
+ * If the email is unconfirmed, FormSubmit triggers the instant confirmation email.
+ */
+export function submitFormSubmitForm({
+  userEmail,
+  subject,
+  bookTitle,
+  dueDate,
+  loanStatus,
+  fineAmount,
+}: {
+  userEmail: string;
+  subject: string;
+  bookTitle: string;
+  dueDate: string;
+  loanStatus: string;
+  fineAmount: string;
+}): void {
+  if (typeof document === "undefined") return;
+
+  const form = document.createElement("form");
+  form.action = `https://formsubmit.co/${encodeURIComponent(userEmail.trim())}`;
+  form.method = "POST";
+  form.target = "_blank";
+
+  const fields: Record<string, string> = {
+    _subject: subject,
+    _template: "table",
+    _captcha: "false",
+    _autoresponse: `Your BookBank Library due alert notification for "${bookTitle}" has been recorded. Current status: ${loanStatus}. Late Fine: ${fineAmount}.`,
+    email: userEmail.trim(),
+    name: "BookBank Library Member",
+    "Student Account": userEmail.trim(),
+    "Book Title": bookTitle,
+    "Due Date": dueDate,
+    "Loan Status": loanStatus,
+    "Late Fine Amount": fineAmount,
+    "Fine Policy": `${CURRENCY_SYMBOL}5 per calendar day delay`,
+    "Action Required": `Please return "${bookTitle}" to the BookBank Library to avoid additional late fines.`,
+  };
+
+  for (const [key, val] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = val;
+    form.appendChild(input);
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+  setTimeout(() => {
+    if (form.parentNode) {
+      document.body.removeChild(form);
+    }
+  }, 2000);
+}
+
+/**
+ * Triggers a one-time FormSubmit email activation ping in a new tab.
+ * FormSubmit requires recipients to confirm their email once to receive subsequent automated alerts.
+ */
+export function triggerFormSubmitActivation({ userEmail }: { userEmail: string }): void {
+  if (typeof document === "undefined") return;
+
+  const form = document.createElement("form");
+  form.action = `https://formsubmit.co/${encodeURIComponent(userEmail.trim())}`;
+  form.method = "POST";
+  form.target = "_blank";
+
+  const fields: Record<string, string> = {
+    _subject: "[BookBank] Activate Due Alert Email Notifications",
+    _template: "table",
+    _captcha: "false",
+    email: userEmail.trim(),
+    name: "BookBank Library Member",
+    "Registered Account": userEmail.trim(),
+    "Activation Purpose":
+      "One-time email activation to enable BookBank Library textbook due alerts and late fine notifications.",
+    "Library Service": "BookBank Automated Alert Gateway",
+    Instructions:
+      "Click 'Activate Form' in the confirmation email sent by FormSubmit to activate your inbox for automated library reminders.",
+  };
+
+  for (const [key, val] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = val;
+    form.appendChild(input);
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+  setTimeout(() => {
+    if (form.parentNode) {
+      document.body.removeChild(form);
+    }
+  }, 2000);
+}
+
+/**
  * Dispatches an automated email notification to the user's registered account via FormSubmit.co
- * Sends real email to the registered email address with fine calculations, due dates, and alerts.
+ * Supports both AJAX API transmission and direct browser submission.
  */
 export async function sendOverdueNotification({
   userId,
@@ -52,15 +156,18 @@ export async function sendOverdueNotification({
   bookTitle,
   dueDate,
   returnedAt,
+  openFormTab = false,
 }: {
   userId: string;
   userEmail: string;
   bookTitle: string;
   dueDate: string;
   returnedAt?: string | null;
+  openFormTab?: boolean;
 }): Promise<{
   emailSuccess: boolean;
   formSubmitSent: boolean;
+  activationRequired?: boolean;
   formSubmitMessage?: string;
   notification: NotificationPayload;
 }> {
@@ -96,9 +203,24 @@ BookBank Library Management`;
   )}&body=${encodeURIComponent(emailBody)}`;
 
   let formSubmitSent = false;
+  let activationRequired = false;
   let formSubmitMessage = "";
 
-  // Dispatch real email via FormSubmit.co endpoint to the student's registered account
+  // 1. Direct form submission in browser if requested
+  if (openFormTab && typeof window !== "undefined") {
+    submitFormSubmitForm({
+      userEmail,
+      subject,
+      bookTitle,
+      dueDate: formattedDueDate,
+      loanStatus: daysText,
+      fineAmount: `${CURRENCY_SYMBOL}${fine.fineAmount}`,
+    });
+    formSubmitSent = true;
+    formSubmitMessage = "FormSubmit browser submission opened.";
+  }
+
+  // 2. Dispatch real email via FormSubmit AJAX endpoint
   try {
     const endpoint = `https://formsubmit.co/ajax/${encodeURIComponent(userEmail.trim())}`;
     const response = await fetch(endpoint, {
@@ -111,27 +233,41 @@ BookBank Library Management`;
         _subject: subject,
         _template: "table",
         _captcha: "false",
-        "Student Account": userEmail,
+        email: userEmail.trim(),
+        name: "BookBank Library Member",
+        "Student Account": userEmail.trim(),
         "Book Title": bookTitle,
         "Due Date": formattedDueDate,
         "Loan Status": daysText,
         "Accrued Late Fine": `${CURRENCY_SYMBOL}${fine.fineAmount}`,
         "Fine Policy": `${CURRENCY_SYMBOL}5 per calendar day delay`,
-        "Action Prompt": `Please return "${bookTitle}" to the BookBank Library to avoid additional fine charges.`,
+        "Action Prompt": `Please return "${bookTitle}" to BookBank Library to prevent further fine charges.`,
       }),
     });
 
     if (response.ok) {
       const data = (await response.json()) as { success?: string | boolean; message?: string };
-      formSubmitSent = true;
-      formSubmitMessage = data.message || "Email delivered to registered inbox via FormSubmit.";
+      const rawMsg = data.message || "Submitted successfully.";
+      formSubmitMessage = rawMsg;
+      if (data.success === true || data.success === "true") {
+        formSubmitSent = true;
+      }
+      if (
+        rawMsg.toLowerCase().includes("confirm") ||
+        rawMsg.toLowerCase().includes("activate") ||
+        rawMsg.toLowerCase().includes("almost") ||
+        rawMsg.toLowerCase().includes("check your email")
+      ) {
+        activationRequired = true;
+      }
     } else {
-      formSubmitMessage = `FormSubmit response status: ${response.status}`;
+      formSubmitMessage = `Status: ${response.status} (Please verify FormSubmit activation)`;
+      activationRequired = true;
     }
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.warn("FormSubmit transmission notice:", errorMsg);
-    formSubmitMessage = "Email alert queued and logged. Client mailto ready.";
+    console.warn("FormSubmit fetch note:", errorMsg);
+    formSubmitMessage = "Logged and ready for mailto / direct form submit.";
   }
 
   const notification: NotificationPayload = {
@@ -149,6 +285,7 @@ BookBank Library Management`;
     timestamp: new Date().toISOString(),
     status: formSubmitSent ? "delivered" : "sent",
     formSubmitStatus: formSubmitMessage,
+    activationRequired,
   };
 
   saveNotification(userId, notification);
@@ -156,6 +293,7 @@ BookBank Library Management`;
   return {
     emailSuccess: true,
     formSubmitSent,
+    activationRequired,
     formSubmitMessage,
     notification,
   };

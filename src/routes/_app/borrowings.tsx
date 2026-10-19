@@ -10,6 +10,8 @@ import { calculateFine, CURRENCY_SYMBOL, DAILY_FINE_RATE } from "@/lib/fine-calc
 import {
   sendOverdueNotification,
   getNotifications,
+  submitFormSubmitForm,
+  triggerFormSubmitActivation,
   type NotificationPayload,
 } from "@/lib/notification-service";
 import { toast } from "sonner";
@@ -24,6 +26,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
+  Send,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/borrowings")({
@@ -159,7 +162,7 @@ export function BorrowingsPage() {
     }
   }
 
-  async function handleSendReminder(record: BorrowingRecord) {
+  async function handleSendReminder(record: BorrowingRecord, openDirectTab: boolean = false) {
     if (!user) return;
     setSendingAlertId(record.id);
 
@@ -173,22 +176,55 @@ export function BorrowingsPage() {
         bookTitle,
         dueDate: record.due_date,
         returnedAt: record.returned_at,
+        openFormTab: openDirectTab,
       });
 
       setNotifications(getNotifications(user.id));
 
-      if (result.formSubmitSent) {
-        toast.success(`📧 Email dispatched via FormSubmit directly to ${userEmail}!`, {
+      if (openDirectTab) {
+        toast.success(`🚀 FormSubmit submission tab opened for ${userEmail}!`, {
+          description: "FormSubmit confirmation and delivery screen displayed in new tab.",
+          duration: 7000,
+        });
+      } else if (result.activationRequired) {
+        toast.warning(`⚠️ One-Time FormSubmit Activation Required`, {
+          description:
+            result.formSubmitMessage ||
+            `Please check ${userEmail} (Inbox and Spam folder) for the confirmation email from FormSubmit and click 'Activate Form'.`,
+          action: {
+            label: "Open FormSubmit Direct",
+            onClick: () => {
+              submitFormSubmitForm({
+                userEmail,
+                subject: result.notification.subject,
+                bookTitle,
+                dueDate: new Date(record.due_date).toLocaleDateString(),
+                loanStatus:
+                  result.notification.daysOverdue > 0
+                    ? `${result.notification.daysOverdue} days overdue`
+                    : "Due soon",
+                fineAmount: `${CURRENCY_SYMBOL}${result.notification.fineAmount}`,
+              });
+            },
+          },
+          duration: 9000,
+        });
+      } else if (result.formSubmitSent) {
+        toast.success(`📧 Due alert email dispatched via FormSubmit to ${userEmail}!`, {
+          description: "Notification delivered. Please check your Inbox and Spam/Junk folder.",
           action: {
             label: "Open Email App",
             onClick: () => {
               window.location.href = result.notification.mailtoLink;
             },
           },
-          duration: 7000,
+          duration: 8000,
         });
       } else {
-        toast.success(`📧 Due alert notification processed for ${userEmail}!`, {
+        toast.info(`📧 Due alert notification processed for ${userEmail}`, {
+          description:
+            result.formSubmitMessage ||
+            "Notification recorded. You can also view details or open email app.",
           action: {
             label: "Open Email App",
             onClick: () => {
@@ -264,12 +300,12 @@ export function BorrowingsPage() {
       </div>
 
       {/* Email Alerts Preferences Card */}
-      <Card className="border bg-card/60 backdrop-blur">
-        <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
+      <Card className="border bg-card/60 backdrop-blur shadow-sm">
+        <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1.5 flex-1">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-primary" />
-              <span className="font-semibold text-sm">Email Due Date Notifications</span>
+              <span className="font-semibold text-sm">Automated Email Due Date & Fine Alerts</span>
               <Badge
                 variant="outline"
                 className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-300"
@@ -277,11 +313,38 @@ export function BorrowingsPage() {
                 Active
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Automated due date alerts and overdue fine notices are routed directly to your
-              registered account: <span className="font-medium text-foreground">{user?.email}</span>
-              . No external setup or API keys required.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Automated notifications for book due dates and overdue fines ({CURRENCY_SYMBOL}5/day) are dispatched to your registered login email:{" "}
+              <span className="font-semibold text-foreground underline decoration-primary/40">
+                {user?.email}
+              </span>
+              . Delivered via FormSubmit.co with 0 external API keys required.
             </p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1 flex items-center gap-1.5">
+              <span>💡</span>
+              <span>
+                <strong>First-Time Inbox Setup:</strong> FormSubmit requires a one-time activation. If you haven't received alerts, check your <strong>Inbox and Spam folder</strong> for an email from <em>FormSubmit</em> and click <strong>"Activate Form"</strong>.
+              </span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1.5 border hover:bg-accent"
+              onClick={() => {
+                if (!user?.email) return;
+                triggerFormSubmitActivation({ userEmail: user.email });
+                toast.info(`🚀 FormSubmit verification opened in a new tab!`, {
+                  description: `Check ${user.email} (Inbox & Spam folder) for FormSubmit's confirmation email and click "Activate Form".`,
+                  duration: 8000,
+                });
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-primary" />
+              Verify / Activate Email on FormSubmit
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -518,11 +581,24 @@ export function BorrowingsPage() {
                           size="sm"
                           variant="outline"
                           className="gap-1.5 text-xs border-primary/30 hover:bg-primary/10"
-                          onClick={() => handleSendReminder(r)}
+                          onClick={() => handleSendReminder(r, false)}
                           disabled={isSendingAlert}
+                          title="Dispatch automated due alert and late fine notification via FormSubmit to registered email"
                         >
                           <Mail className="h-3.5 w-3.5 text-primary" />
                           {isSendingAlert ? "Sending..." : "Send Due Alert (Email)"}
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1 text-xs text-muted-foreground hover:text-foreground h-9 px-2.5 border border-dashed border-border/60 hover:border-primary/40"
+                          onClick={() => handleSendReminder(r, true)}
+                          disabled={isSendingAlert}
+                          title="Open FormSubmit delivery & verification screen directly in a new tab"
+                        >
+                          <ExternalLink className="h-3 w-3 text-primary" />
+                          Direct Tab
                         </Button>
 
                         <Button
