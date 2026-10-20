@@ -25,13 +25,41 @@ export interface ActiveUserSession {
 const ACTIVE_USER_KEY = "bookbank_active_user";
 const REGISTERED_ACCOUNTS_KEY = "bookbank_registered_accounts";
 
+export const DEFAULT_ACCOUNTS: StoredAccount[] = [
+  {
+    id: "admin-default-01",
+    email: "admin@bookbank.com",
+    password: "admin123",
+    fullName: "Chief Librarian (Admin)",
+    phoneNumber: "+91 98765 43210",
+    role: "admin",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "student-default-01",
+    email: "student@bookbank.com",
+    password: "student123",
+    fullName: "Alex Student",
+    phoneNumber: "+91 98765 12345",
+    role: "student",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+];
+
 export function getStoredAccounts(): StoredAccount[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return DEFAULT_ACCOUNTS;
   try {
     const raw = localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: StoredAccount[] = raw ? JSON.parse(raw) : [];
+    const combined = [...parsed];
+    DEFAULT_ACCOUNTS.forEach((def) => {
+      if (!combined.some((a) => a.email.toLowerCase() === def.email.toLowerCase())) {
+        combined.push(def);
+      }
+    });
+    return combined;
   } catch {
-    return [];
+    return DEFAULT_ACCOUNTS;
   }
 }
 

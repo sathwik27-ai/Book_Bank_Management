@@ -1,6 +1,8 @@
 # BookBank — Enterprise Library & Book Bank Management System
 
-> Built with **TanStack Start**, **React 19**, **Vite**, **Supabase (PostgreSQL & Auth)**, and **Tailwind CSS**. Engineered with strict Row-Level Security (RLS), an automated **Daily Fine Calculation Engine**, and an asynchronous **Email Due Notification Gateway** directly connected to registered student accounts.
+> **Authorized & Developed by:** **Sathwik** ([@sathwik27-ai](https://github.com/sathwik27-ai) | `sathwik12006@gmail.com`)  
+> **Official Repository:** [https://github.com/sathwik27-ai/Book_Bank_Management](https://github.com/sathwik27-ai/Book_Bank_Management)  
+> **Platform Stack:** **TanStack Start**, **React 19**, **Vite**, **Supabase (PostgreSQL & Auth)**, and **Tailwind CSS**. Engineered with strict Row-Level Security (RLS), **Dual-Layer Database Account Persistence**, an automated **Daily Fine Calculation Engine**, and an asynchronous **Email Due Notification Gateway**.
 
 ---
 
@@ -299,19 +301,37 @@ BookBank implements a direct user registration and authentication lifecycle with
 
 ## 10. Summary of Top-Notch Engineering Additions
 
-1. **Overdue Fine Engine (`src/lib/fine-calculator.ts`)**:
+1. **Database Account Creation & Resilient Authentication (`src/routes/login.tsx`, `src/hooks/use-auth.ts`)**:
+   - Stores newly created accounts directly in PostgreSQL database (`auth.users`, `public.profiles`, and `public.user_roles`).
+   - Automatically bypasses blocking remote email rate limits and unconfirmed email errors (`email_not_confirmed`).
+   - Seamlessly transitions new registrations directly into an active session.
+   - Provides instant 1-click Quick Fill buttons for pre-configured Demo Admin and Demo Student accounts.
+2. **Overdue Fine Engine (`src/lib/fine-calculator.ts`)**:
    - Normalized calendar midnight calculation ($₹5/\text{day}$).
    - Live badge status and dashboard counters for both student and admin overviews.
-2. **Automated Email Due Notification Gateway (`src/lib/notification-service.ts`)**:
+3. **Automated Email Due Notification Gateway (`src/lib/notification-service.ts`)**:
    - Dispatches notifications directly to the registered student email account.
    - Zero external third-party API keys required.
    - Dispatched alert history audit log and native email client integration.
-3. **Robust Signup & Signin Flow (`src/routes/login.tsx`, `src/hooks/use-auth.ts`)**:
-   - Eliminated SMTP 429 rate limit errors.
-   - Smooth registration, automatic role assignment, and direct transition to login.
 4. **Dynamic Catalog Categorization (`src/routes/_app/books.tsx`)**:
    - Real-time catalog categories dynamically extracted from database titles.
    - Duplicate loan prevention.
 5. **Admin Operations & Clean UI (`src/routes/_app/admin.tsx`, `_app.tsx`)**:
    - Fixed React Hook execution order.
    - Clean, professional design with zero clutter.
+
+---
+
+## 11. Author, Authorization & Intellectual Property
+
+| Attribute | Details |
+| :--- | :--- |
+| **Project Lead & Author** | **Sathwik** |
+| **GitHub Handle** | [@sathwik27-ai](https://github.com/sathwik27-ai) |
+| **Contact Email** | `sathwik12006@gmail.com` |
+| **Repository URL** | [https://github.com/sathwik27-ai/Book_Bank_Management](https://github.com/sathwik27-ai/Book_Bank_Management) |
+| **Authorization Status** | **Officially Authorized by Sathwik** |
+| **License** | MIT License — Open for academic, enterprise, and production deployments |
+
+All architectural modifications, theoretical mathematical models, and code enhancements in this repository are officially certified and authorized under **Sathwik**'s ownership.
+
