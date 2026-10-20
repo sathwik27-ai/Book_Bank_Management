@@ -99,29 +99,36 @@ stateDiagram-v2
 
 ---
 
-## 3. Automated Email Due Notification Gateway (via FormSubmit.co)
+## 3. Email Alert Architecture: Author-Exclusive Warning & 14-Day Automated Machine Watchdog
 
-BookBank includes an automated email alert gateway powered by **FormSubmit.co** that delivers real, structured notifications directly to borrowers' registered email inboxes regarding upcoming deadlines and overdue textbook late fines with **zero external API keys, SMTP passwords, or telecom fees**.
+Under BookBank's certified circulation rules, **students can NEVER dispatch email notifications themselves**. The student portal is strictly restricted to viewing transparent calculation layers, overdue fine status, and read-only notification logs. 
 
-### Notification Specification
+Email alerts can only be generated through two strictly controlled channels:
+1. **Author / Librarian Exclusive Warning (`src/routes/_app/admin.tsx`)**: The Author (Sathwik) reviews delayed borrowings in the Admin Console and manually dispatches overdue alerts directly to students who have delayed returning their books.
+2. **Autonomous 14-Day Machine Watchdog (`src/lib/notification-service.ts`)**: When an active textbook loan exceeds the 14-day loan term ($D_{\text{overdue}} > 0$) without being returned, the automated machine watchdog automatically detects the delay, assesses daily penalty accruals ($₹5/\text{day}$), and dispatches automated overdue warning alerts directly to the delinquent borrower's registered email.
 
-| Trigger Point                                               | Target Recipient                         | Payload Content                                                                        | Delivery Method                                                                                                                         |
-| :---------------------------------------------------------- | :--------------------------------------- | :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
-| - Due in $\le 2$ days<br>- Due Today<br>- Overdue ($D > 0$) | User's registered account (`user.email`) | Book title, due date, accrued late fine, return instructions, library contact details. | **FormSubmit.co AJAX Endpoint** directly delivering real email to the registered inbox + 1-click native Email app fallback (`mailto:`). |
+### Notification Flow & Permissions Matrix
 
-### Architectural Flow of Email Alerts
+| Entity | Permission | Capability | Delivery Channel |
+| :--- | :--- | :--- | :--- |
+| **Student (Borrower)** | **Read-Only** | Views due date countdown layers, fine calculation breakdowns ($₹5/\text{day}$), and the chronological audit log of alerts received from the Author / Machine. **Cannot trigger or dispatch emails.** | Personal Alerts Drawer (`bookbank_notifications_${userId}`). |
+| **Author / Librarian (Admin)** | **Full Authority** | Monitors all system-wide delayed loans past 14 days and triggers official Author Overdue Warning emails to delayed students. | FormSubmit.co AJAX Endpoint / Direct Submission tab + Native email link. |
+| **14-Day Machine Watchdog** | **Autonomous Daemon** | Continuously evaluates unreturned active loans exceeding the standard 14-day lending period; automatically dispatches daily overdue warnings. | Automated FormSubmit API dispatch + Persistent machine audit records. |
 
-1. **Trigger Evaluation**: When a user accesses Borrowings or triggers "Send Due Alert", active loans are evaluated against `calculateFine()`.
-2. **Recipient Resolution**: Email is automatically resolved from the active authenticated account (`user.email`).
-3. **FormSubmit Delivery (`src/lib/notification-service.ts`)**:
-   - Dispatches a structured HTTP POST to `https://formsubmit.co/ajax/${email}` with `_subject`, `_template: "table"`, `_captcha: "false"`, `email: userEmail`, book details, due date, and fine calculations.
-   - FormSubmit delivers the formatted HTML notification directly to the student's email inbox without requiring any API keys or credentials.
-   - **One-Time Email Activation Protocol**: The first time an email address receives submissions through FormSubmit, FormSubmit sends an activation link (*"Action Required: Confirm your email to receive form submissions"*). Once confirmed by clicking **"Activate Form"**, all subsequent library alerts are delivered automatically to the inbox.
-   - **Direct Browser Submission Option (`submitFormSubmitForm`)**: Provides a direct submission method that opens FormSubmit's confirmation window in a new tab, bypassing any potential client-side ad-blockers or CORS restrictions and providing visual delivery confirmation.
-4. **Delivery & Audit Trail**:
-   - Dispatches are recorded in persistent notification logs (`bookbank_notifications_${userId}`) to track delivery timestamps, recipient address, and alert history.
-   - An interactive on-screen notification drawer allows students and administrators to inspect dispatched alert history.
-   - Provides a 1-click **"Open in Email App"** action (`mailto:`) as an immediate native client shortcut.
+### Architectural Flow of Overdue Alerts
+
+1. **Autonomous 14-Day Machine Evaluation (`runAutomatedMachineDueCheck`)**:
+   - Executes automatically on application startup, dashboard load, or borrowing catalog inspection.
+   - Filters loans where `status === 'borrowed'` and `daysOverdue > 0` (loan age $> 14\text{ days}$).
+   - Generates machine alert: `[Automated 14-Day Overdue Warning] Textbook Not Returned: "${bookTitle}"`.
+   - Records the dispatch under `sender: "automated_machine"` with the badge `🤖 14-Day Machine Alert`.
+2. **Author Manual Dispatch (`sendAuthorOverdueNotification`)**:
+   - Available exclusively in the Admin Console under **"Overdue Delayed Loans & Alert Dispatcher (Author Control)"**.
+   - The Author (Sathwik) clicks **"Send Author Warning"** to issue an official library overdue notice directly to the delayed student.
+   - Records under `sender: "author_admin"` with the badge `🛡️ Author / Librarian Alert`.
+3. **Student Read-Only Inspection (`src/routes/_app/borrowings.tsx`)**:
+   - Students observe real-time fine calculation layers and inspect all dispatched alerts with sender verification, timestamp, and fine assessments.
+
 
 ---
 
@@ -306,13 +313,13 @@ BookBank implements a direct user registration and authentication lifecycle with
    - Automatically bypasses blocking remote email rate limits and unconfirmed email errors (`email_not_confirmed`).
    - Seamlessly transitions new registrations directly into an active session.
    - Provides instant 1-click Quick Fill buttons for pre-configured Demo Admin and Demo Student accounts.
-2. **Overdue Fine Engine (`src/lib/fine-calculator.ts`)**:
+2. **Author-Exclusive Overdue Alerting & 14-Day Automated Machine Watchdog (`src/lib/notification-service.ts`, `src/routes/_app/admin.tsx`)**:
+   - Students are strictly barred from dispatching emails; they only access transparent audit logs and calculation layers.
+   - The Author (Sathwik) possesses exclusive authority in the Admin Console to dispatch official warning emails to students delayed beyond the 14-day loan term.
+   - An autonomous machine daemon monitors active loans and automatically triggers overdue alert dispatches after 14 days of unreturned delay.
+3. **Overdue Fine Engine (`src/lib/fine-calculator.ts`)**:
    - Normalized calendar midnight calculation ($₹5/\text{day}$).
    - Live badge status and dashboard counters for both student and admin overviews.
-3. **Automated Email Due Notification Gateway (`src/lib/notification-service.ts`)**:
-   - Dispatches notifications directly to the registered student email account.
-   - Zero external third-party API keys required.
-   - Dispatched alert history audit log and native email client integration.
 4. **Dynamic Catalog Categorization (`src/routes/_app/books.tsx`)**:
    - Real-time catalog categories dynamically extracted from database titles.
    - Duplicate loan prevention.

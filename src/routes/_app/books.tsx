@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, BookOpen, Sparkles, BookmarkPlus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { registerSystemBorrowing } from "@/lib/notification-service";
 
 export const Route = createFileRoute("/_app/books")({
   component: BooksPage,
@@ -186,6 +187,18 @@ export function BooksPage() {
 
       existing.unshift(newRecord);
       localStorage.setItem(borrowingsKey, JSON.stringify(existing));
+
+      registerSystemBorrowing({
+        id: newRecord.id,
+        userId: user.id,
+        userEmail: user.email || "student@bookbank.com",
+        userName: user.user_metadata?.full_name || "Student Borrower",
+        bookId: book.id,
+        bookTitle: book.title,
+        dueDate: newDueDate.toISOString(),
+        borrowedAt: newRecord.borrowed_at,
+        status: "borrowed",
+      });
 
       // Adjust stock count
       const stockModsKey = "bookbank_stock_mods";

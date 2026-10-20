@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculateFine, CURRENCY_SYMBOL, DAILY_FINE_RATE } from "@/lib/fine-calculator";
 import {
-  sendOverdueNotification,
   getNotifications,
-  submitFormSubmitForm,
+  runAutomatedMachineDueCheck,
+  markSystemBorrowingReturned,
   triggerFormSubmitActivation,
   type NotificationPayload,
 } from "@/lib/notification-service";
@@ -50,7 +50,6 @@ export function BorrowingsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "active" | "overdue" | "returned">("all");
   const [returningId, setReturningId] = useState<string | null>(null);
-  const [sendingAlertId, setSendingAlertId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationPayload[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -99,6 +98,15 @@ export function BorrowingsPage() {
 
       setRows(combined);
       setNotifications(getNotifications(user.id));
+
+      // Trigger background 14-day automated machine overdue watchdog
+      runAutomatedMachineDueCheck()
+        .then((res) => {
+          if (res.newMachineDispatches > 0 && user) {
+            setNotifications(getNotifications(user.id));
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.error(err);
     } finally {
@@ -122,6 +130,8 @@ export function BorrowingsPage() {
       } catch {
         // Fallback
       }
+
+      markSystemBorrowingReturned(record.id);
 
       if (user && typeof window !== "undefined") {
         const borrowingsKey = `bookbank_borrowings_${user.id}`;
@@ -159,86 +169,6 @@ export function BorrowingsPage() {
       toast.error(message);
     } finally {
       setReturningId(null);
-    }
-  }
-
-  async function handleSendReminder(record: BorrowingRecord, openDirectTab: boolean = false) {
-    if (!user) return;
-    setSendingAlertId(record.id);
-
-    const bookTitle = record.books?.title || "Borrowed Textbook";
-    const userEmail = user.email || "student@bookbank.local";
-
-    try {
-      const result = await sendOverdueNotification({
-        userId: user.id,
-        userEmail,
-        bookTitle,
-        dueDate: record.due_date,
-        returnedAt: record.returned_at,
-        openFormTab: openDirectTab,
-      });
-
-      setNotifications(getNotifications(user.id));
-
-      if (openDirectTab) {
-        toast.success(`🚀 FormSubmit submission tab opened for ${userEmail}!`, {
-          description: "FormSubmit confirmation and delivery screen displayed in new tab.",
-          duration: 7000,
-        });
-      } else if (result.activationRequired) {
-        toast.warning(`⚠️ One-Time FormSubmit Activation Required`, {
-          description:
-            result.formSubmitMessage ||
-            `Please check ${userEmail} (Inbox and Spam folder) for the confirmation email from FormSubmit and click 'Activate Form'.`,
-          action: {
-            label: "Open FormSubmit Direct",
-            onClick: () => {
-              submitFormSubmitForm({
-                userEmail,
-                subject: result.notification.subject,
-                bookTitle,
-                dueDate: new Date(record.due_date).toLocaleDateString(),
-                loanStatus:
-                  result.notification.daysOverdue > 0
-                    ? `${result.notification.daysOverdue} days overdue`
-                    : "Due soon",
-                fineAmount: `${CURRENCY_SYMBOL}${result.notification.fineAmount}`,
-              });
-            },
-          },
-          duration: 9000,
-        });
-      } else if (result.formSubmitSent) {
-        toast.success(`📧 Due alert email dispatched via FormSubmit to ${userEmail}!`, {
-          description: "Notification delivered. Please check your Inbox and Spam/Junk folder.",
-          action: {
-            label: "Open Email App",
-            onClick: () => {
-              window.location.href = result.notification.mailtoLink;
-            },
-          },
-          duration: 8000,
-        });
-      } else {
-        toast.info(`📧 Due alert notification processed for ${userEmail}`, {
-          description:
-            result.formSubmitMessage ||
-            "Notification recorded. You can also view details or open email app.",
-          action: {
-            label: "Open Email App",
-            onClick: () => {
-              window.location.href = result.notification.mailtoLink;
-            },
-          },
-          duration: 7000,
-        });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Notification failed: ${msg}`);
-    } finally {
-      setSendingAlertId(null);
     }
   }
 
@@ -404,8 +334,8 @@ export function BorrowingsPage() {
           <CardContent className="space-y-2 pt-0">
             {notifications.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">
-                No notification alerts dispatched yet. Click "Send Due Alert" on any active loan
-                below to test email notification dispatch!
+                No notification alerts received yet. Alerts will be automatically dispatched by the
+                machine after 14 days of delay or personally issued by the Author/Librarian.
               </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -414,24 +344,41 @@ export function BorrowingsPage() {
                     key={n.id}
                     className="p-3 rounded-lg border bg-muted/40 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
                   >
-                    <div className="space-y-0.5">
-                      <div className="font-semibold flex items-center gap-2">
-                        <Mail className="h-3.5 w-3.5 text-sky-500" />
+                    <div className="space-y-1 flex-1">
+                      <div className="font-semibold flex items-center gap-2 flex-wrap">
+                        {n.sender === "automated_machine" ? (
+                          <Badge
+                            variant="secondary"
+                            className="bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-400/30 text-[10px]"
+                          >
+                            🤖 14-Day Machine Alert
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-400/30 text-[10px]"
+                          >
+                            🛡️ Author / Librarian Alert
+                          </Badge>
+                        )}
                         <span>{n.subject}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {n.status}
-                        </Badge>
                       </div>
                       <p className="text-muted-foreground text-[11px]">
-                        To: {n.recipientEmail} · {new Date(n.timestamp).toLocaleString()}
+                        Issued by: <strong>{n.senderName}</strong> · To: {n.recipientEmail} ·{" "}
+                        {new Date(n.timestamp).toLocaleString()}
                       </p>
+                      {n.daysOverdue > 0 && (
+                        <p className="text-[11px] text-destructive font-medium">
+                          Delay Assessment: {n.daysOverdue} days overdue · Late Fine: ₹{n.fineAmount}
+                        </p>
+                      )}
                     </div>
 
                     <a
                       href={n.mailtoLink}
                       className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline font-medium shrink-0 self-end sm:self-auto"
                     >
-                      Open in Email App <ExternalLink className="h-3 w-3" />
+                      View in Email Client <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
                 ))}
@@ -576,42 +523,16 @@ export function BorrowingsPage() {
 
                   <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto shrink-0">
                     {r.status === "borrowed" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs border-primary/30 hover:bg-primary/10"
-                          onClick={() => handleSendReminder(r, false)}
-                          disabled={isSendingAlert}
-                          title="Dispatch automated due alert and late fine notification via FormSubmit to registered email"
-                        >
-                          <Mail className="h-3.5 w-3.5 text-primary" />
-                          {isSendingAlert ? "Sending..." : "Send Due Alert (Email)"}
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1 text-xs text-muted-foreground hover:text-foreground h-9 px-2.5 border border-dashed border-border/60 hover:border-primary/40"
-                          onClick={() => handleSendReminder(r, true)}
-                          disabled={isSendingAlert}
-                          title="Open FormSubmit delivery & verification screen directly in a new tab"
-                        >
-                          <ExternalLink className="h-3 w-3 text-primary" />
-                          Direct Tab
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="gap-1.5 text-xs"
-                          onClick={() => returnBook(r)}
-                          disabled={isReturning}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          {isReturning ? "Returning..." : "Return Book"}
-                        </Button>
-                      </>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="gap-1.5 text-xs shadow-sm"
+                        onClick={() => returnBook(r)}
+                        disabled={isReturning}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        {isReturning ? "Returning..." : "Return Book"}
+                      </Button>
                     )}
                   </div>
                 </CardContent>
