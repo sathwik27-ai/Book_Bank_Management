@@ -17,22 +17,8 @@ import {
   ShieldCheck,
   Search,
   ShieldAlert,
-  Mail,
-  AlertTriangle,
-  Bot,
-  ExternalLink,
-  Send,
-  Clock,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  getAllSystemBorrowings,
-  sendAuthorOverdueNotification,
-  runAutomatedMachineDueCheck,
-  submitFormSubmitForm,
-} from "@/lib/notification-service";
-import { calculateFine, CURRENCY_SYMBOL, DAILY_FINE_RATE } from "@/lib/fine-calculator";
 
 export const Route = createFileRoute("/_app/admin")({
   component: AdminPage,
@@ -57,24 +43,6 @@ export function AdminPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [delayedLoans, setDelayedLoans] = useState<
-    Array<{
-      id: string;
-      userId: string;
-      userEmail: string;
-      userName: string;
-      bookId: string;
-      bookTitle: string;
-      dueDate: string;
-      borrowedAt: string;
-      returnedAt?: string | null;
-      status: string;
-      fine: ReturnType<typeof calculateFine>;
-    }>
-  >([]);
-  const [sendingAlertLoanId, setSendingAlertLoanId] = useState<string | null>(null);
-  const [runningMachineCheck, setRunningMachineCheck] = useState(false);
-
   const [form, setForm] = useState({
     title: "",
     author: "",
@@ -85,7 +53,6 @@ export function AdminPage() {
 
   const load = useCallback(async () => {
     try {
-      // 1. Load catalog books
       const { data, error } = await supabase
         .from("books")
         .select("*")
@@ -121,18 +88,6 @@ export function AdminPage() {
       }
 
       setBooks(loaded);
-
-      // 2. Load and evaluate delayed overdue student loans
-      const allB = getAllSystemBorrowings();
-      const delayed = allB
-        .filter((b) => b.status === "borrowed")
-        .map((b) => ({
-          ...b,
-          fine: calculateFine(b.dueDate, b.returnedAt),
-        }))
-        .filter((b) => b.fine.isOverdue);
-
-      setDelayedLoans(delayed);
     } catch (err) {
       console.error(err);
     }
@@ -141,52 +96,6 @@ export function AdminPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function handleSendAuthorAlert(loan: (typeof delayedLoans)[0], openDirectTab = false) {
-    setSendingAlertLoanId(loan.id);
-    try {
-      const res = await sendAuthorOverdueNotification({
-        userId: loan.userId,
-        userEmail: loan.userEmail,
-        userName: loan.userName,
-        bookTitle: loan.bookTitle,
-        dueDate: loan.dueDate,
-        returnedAt: loan.returnedAt,
-        openFormTab: openDirectTab,
-        authorName: "Sathwik (Author & Chief Librarian)",
-      });
-
-      if (openDirectTab) {
-        toast.success(`FormSubmit direct dispatch tab opened for ${loan.userEmail}!`);
-      } else if (res.formSubmitSent) {
-        toast.success(`Official Author Due Alert dispatched to ${loan.userEmail}!`);
-      } else {
-        toast.info(`Author overdue notice logged for ${loan.userEmail}.`);
-      }
-      load();
-    } catch (err: unknown) {
-      toast.error(
-        "Failed to send author alert: " + (err instanceof Error ? err.message : String(err)),
-      );
-    } finally {
-      setSendingAlertLoanId(null);
-    }
-  }
-
-  async function handleTriggerMachineCheck() {
-    setRunningMachineCheck(true);
-    try {
-      const res = await runAutomatedMachineDueCheck();
-      toast.success(
-        `Automated 14-Day Machine Check: Scanned ${res.scannedCount} loans, identified ${res.delayedOverdueCount} delayed, dispatched ${res.newMachineDispatches} new alerts.`,
-      );
-      load();
-    } catch (err) {
-      toast.error("Machine check failed: " + String(err));
-    } finally {
-      setRunningMachineCheck(false);
-    }
-  }
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase().trim();
@@ -335,11 +244,6 @@ export function AdminPage() {
     );
   }
 
-  const totalOverdueFines = useMemo(
-    () => delayedLoans.reduce((sum, l) => sum + l.fine.fineAmount, 0),
-    [delayedLoans],
-  );
-
   const stats = [
     { label: "Catalog Titles", value: books.length, icon: Library, color: "text-blue-500" },
     {
@@ -349,17 +253,12 @@ export function AdminPage() {
       color: "text-purple-500",
     },
     {
-      label: "Delayed Loans (14+ Days)",
-      value: delayedLoans.length,
-      icon: Clock,
-      color: "text-rose-500",
+      label: "Currently Available",
+      value: totalAvailable,
+      icon: ShieldCheck,
+      color: "text-emerald-500",
     },
-    {
-      label: "Accrued Late Penalties",
-      value: `${CURRENCY_SYMBOL}${totalOverdueFines}`,
-      icon: AlertTriangle,
-      color: "text-amber-500",
-    },
+    { label: "Subject Categories", value: categoryCount, icon: Layers, color: "text-amber-500" },
   ];
 
   return (
@@ -374,8 +273,8 @@ export function AdminPage() {
           <h1 className="text-2xl sm:text-3xl font-bold">Admin Console</h1>
         </div>
         <p className="opacity-90 text-sm sm:text-base max-w-2xl">
-          Maintain the textbook catalog, monitor overdue borrowing delays, and issue authorized email
-          alerts to delinquent accounts.
+          Maintain the textbook catalog, inject new inventory, adjust copy quantities, and monitor
+          real-time availability across the institution.
         </p>
       </div>
 
@@ -393,127 +292,6 @@ export function AdminPage() {
           </Card>
         ))}
       </div>
-
-      {/* Overdue Delayed Borrowers & Author Alert Dispatcher */}
-      <Card className="border shadow-sm border-rose-500/20 bg-card">
-        <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-rose-500" />
-              <CardTitle className="text-lg">
-                Overdue Delayed Loans & Alert Dispatcher (Author Control)
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="bg-emerald-500/10 text-emerald-600 border-emerald-400/40 text-[10px]"
-              >
-                Author Sathwik Authorized
-              </Badge>
-            </div>
-            <CardDescription className="text-xs leading-relaxed">
-              Under strict system policy, students cannot trigger email reminders. Email alerts are
-              exclusively issued by the <strong>Author/Librarian</strong> to delayed borrowers, or
-              autonomously triggered by the <strong>14-day machine watchdog</strong>.
-            </CardDescription>
-          </div>
-
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs gap-2 shrink-0 border-primary/40 hover:bg-primary/10"
-            onClick={handleTriggerMachineCheck}
-            disabled={runningMachineCheck}
-          >
-            <Bot className="h-3.5 w-3.5 text-primary" />
-            {runningMachineCheck ? "Checking 14-Day Loans..." : "Run 14-Day Machine Check"}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {delayedLoans.length === 0 ? (
-            <div className="p-6 text-center border rounded-xl bg-muted/20 text-muted-foreground text-xs space-y-1">
-              <p className="font-semibold text-foreground">
-                🎉 No delayed book loans beyond 14 days!
-              </p>
-              <p>All active student borrowings are currently within their 14-day lending period.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-destructive flex items-center justify-between">
-                <span>
-                  {delayedLoans.length} student loan(s) delayed past the 14-day due date:
-                </span>
-                <span>
-                  Total Overdue Fines: {CURRENCY_SYMBOL}
-                  {totalOverdueFines} ({CURRENCY_SYMBOL}5/day)
-                </span>
-              </div>
-
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {delayedLoans.map((loan) => (
-                  <div
-                    key={loan.id}
-                    className="p-3.5 rounded-xl border bg-destructive/5 border-destructive/20 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3"
-                  >
-                    <div className="space-y-1 flex-1">
-                      <div className="font-semibold text-sm flex items-center gap-2">
-                        <span>{loan.bookTitle}</span>
-                        <Badge variant="destructive" className="text-[10px]">
-                          {loan.fine.daysOverdue} days overdue
-                        </Badge>
-                      </div>
-                      <p className="text-muted-foreground text-xs">
-                        Borrower:{" "}
-                        <strong className="text-foreground">{loan.userName}</strong> (
-                        <span className="underline">{loan.userEmail}</span>)
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                        <span>
-                          Borrowed: {new Date(loan.borrowedAt).toLocaleDateString()}
-                        </span>
-                        <span>·</span>
-                        <span className="text-destructive font-medium">
-                          Due Date: {new Date(loan.dueDate).toLocaleDateString()}
-                        </span>
-                        <span>·</span>
-                        <span className="font-bold text-destructive">
-                          Accrued Fine: {CURRENCY_SYMBOL}
-                          {loan.fine.fineAmount}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="text-xs gap-1.5 h-8 bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-sm"
-                        onClick={() => handleSendAuthorAlert(loan, false)}
-                        disabled={sendingAlertLoanId === loan.id}
-                        title="Send official overdue warning email directly to the student from the Author"
-                      >
-                        <Send className="h-3 w-3" />
-                        {sendingAlertLoanId === loan.id ? "Dispatching..." : "Send Author Warning"}
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs gap-1 h-8 px-2 border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleSendAuthorAlert(loan, true)}
-                        disabled={sendingAlertLoanId === loan.id}
-                        title="Open direct FormSubmit verification and dispatch in a new tab"
-                      >
-                        <ExternalLink className="h-3 w-3 text-destructive" />
-                        Tab
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Add New Book Form */}
       <Card className="border">

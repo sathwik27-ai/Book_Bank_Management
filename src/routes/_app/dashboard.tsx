@@ -20,7 +20,6 @@ import {
   Mail,
   Coins,
 } from "lucide-react";
-import { runAutomatedMachineDueCheck } from "@/lib/notification-service";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
@@ -56,9 +55,6 @@ export function Dashboard() {
     try {
       // 1. Load book catalog statistics
       const { data: books } = await supabase.from("books").select("available_copies, total_copies");
-
-      // Trigger 14-day automated machine overdue check in background
-      runAutomatedMachineDueCheck().catch(() => {});
 
       const totalTitles = books?.length ?? 0;
       const totalCopiesCount = books?.reduce((s, b) => s + (b.total_copies ?? 0), 0) ?? 0;
